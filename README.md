@@ -1,4 +1,4 @@
-# 포세이돈 (Poseidon) 🌊⚓
+# 오르카 (Orca) 🐋
 
 > **범용 해양 자율운항 엔진 v0.2.0**
 > 수상함 · 잠수함 · 요트 · 보트 · 자율USV — 단일 엔진
@@ -39,7 +39,7 @@ Poseidon은 모든 해양 기체를 위한 **범용 자율운항 제어 엔진**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Poseidon v0.2.0                         │
+│                           Orca v0.2.0                           │
 │                                                                 │
 │  [센서 / AIS / CARLA / ROS2 / 자체 시뮬레이터]                   │
 │              ↓                                                  │
@@ -464,7 +464,7 @@ pytest tests/ -v
 | [Autonomy_Runtime_Stack](https://github.com/qquartsco-svg/Autonomy_Runtime_Stack) | 자율주행 기초 엔진 (EKF·FSM·Stanley) |
 | [SYD_DRIFT](https://github.com/qquartsco-svg/SYD_DRIFT) | 자율주행 + SHA-256 감사 체인 |
 | [marine-propulsion-engine](https://github.com/qquartsco-svg/marine-propulsion-engine) | 선박 추진축 마모 제어 + 감사 체인 |
-| **Poseidon** | 범용 해양 자율운항 엔진 (이 레포) |
+| **Orca** | 범용 해양 자율운항 엔진 (이 레포) |
 
 ---
 
@@ -474,4 +474,4 @@ MIT
 
 ---
 
-*Poseidon — 바다의 신. 수상함부터 잠수함까지, 모든 해양 기체의 항로를 찾는다.*
+*Orca — 범고래. 바다에서 가장 정밀하게 항행하는 존재. 모든 해양 기체의 항로를 찾는다.*

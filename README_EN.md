@@ -1,243 +1,173 @@
-# Marine Autonomy Stack
+# Orca 🐋
 
-Autonomous vessel runtime for edge AI platforms.
-Sibling package to **Autonomy_Runtime_Stack** — same design philosophy,
-adapted for 3-DOF marine vessel dynamics.
+> **Universal Maritime Autonomy Engine v0.2.0**
+> Surface vessels · Submarines · Yachts · Boats · Autonomous USV — single engine
+
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-82_passed-brightgreen)](tests/)
+[![Stdlib](https://img.shields.io/badge/Core-stdlib_only-lightgrey)](marine_autonomy/)
+
+**한국어 버전:** [README.md](README.md)
 
 ---
 
 ## What it is
 
-A pure-Python package (zero external dependencies) that provides:
+Orca is a **universal autonomous maritime control engine** in pure Python.
 
-- **Fossen 3-DOF vessel model** — simplified linear dynamics with RK4 integration
-- **LOS guidance** — Line-of-Sight heading control with waypoint sequencing
-- **COLREGs FSM** — heuristic Rules 8/13/14/15/16 collision avoidance
-- **Marine EKF** — GPS + heading + speed fusion (4-state, pure Python matrices)
-- **Omega (Ω) multiplier** — safety capability scaling based on risk, fuel, visibility, depth
-- **Operating presets** — Harbor / Coastal / Ocean / River profiles
+Sibling package to [Autonomy_Runtime_Stack](https://github.com/qquartsco-svg/Autonomy_Runtime_Stack) — same Edge AI design principles, adapted for marine environments. Runs on edge devices (Jetson Nano, Raspberry Pi) with zero external dependencies.
 
-> **Disclaimer:** This is not a certified COLREGs compliance system.
-> All avoidance logic is internal heuristics intended for research and simulation.
-> Any manoeuvre aboard a real vessel requires confirmation by a qualified officer.
+```
+Core layers (v0.2.0):
+  Nonlinear Fossen 3-DOF dynamics  — Coriolis matrix + nonlinear damping + RK4
+  Disturbance model                — Wave (sinusoidal) + Wind (dynamic pressure) + Current
+  LOS path following               — Line-of-Sight heading + waypoint sequencing
+  Multi-vessel COLREGs FSM         — All contacts simultaneously + max avoidance angle
+  Maritime A* path planning        — Depth-chart obstacle avoidance + depth bonus cost
+  Marine EKF state estimation      — GPS + heading + speed fusion (4-state, pure Python)
+  Omega (Ω) safety verdict         — Risk · fuel · visibility · depth · contacts
+  Universal hull classes           — Surface / Submarine (4-DOF) / Yacht / Boat / USV
+```
+
+> **Disclaimer:** COLREGs logic is an operational heuristic, not a certified compliance system.
 
 ---
 
-## Architecture
+## Hull Classes
+
+| HullClass | DOF | Vessel | Default Preset |
+|-----------|-----|--------|----------------|
+| `SURFACE_VESSEL` | 3 | 10m patrol vessel | harbor / coastal / ocean / river |
+| `SUBMARINE` | 4 | 50m submarine | sub_shallow / sub_deep |
+| `YACHT` | 3 | 12m sailing yacht | yacht_racing / yacht_cruising |
+| `BOAT` | 3 | 6m speedboat | boat_patrol / boat_harbor |
+| `AUTONOMOUS_USV` | 3 | 3m unmanned surface vehicle | usv_survey |
+
+---
+
+## Core Equations
+
+### 1. Nonlinear Fossen 3-DOF
 
 ```
-                         ┌─────────────────────────────────┐
-External sensors         │       Marine Autonomy Stack      │
-                         │                                  │
-  AIS / Radar msgs ─────>│  AIS Adapter                    │
-  GNSS / IMU ──────────>│    ego_state_from_nmea()         │
-                         │    contacts_to_perception()      │
-                         │           │                      │
-                         │           v                      │
-                         │   MarinePerception               │
-                         │   VesselState                    │
-                         │           │                      │
-                         │           v                      │
-                         │   VesselOrchestrator.tick()      │
-                         │   ┌───────────────────────────┐  │
-                         │   │  1. MarineEKF (predict+   │  │
-                         │   │     GPS/hdg/speed update) │  │
-                         │   │  2. COLREGsBehavior FSM   │  │
-                         │   │  3. LOSGuidance → rudder  │  │
-                         │   │  4. Speed PID → thrust    │  │
-                         │   │  5. Ω safety multiplier   │  │
-                         │   │  6. Actuator normalise    │  │
-                         │   └───────────────────────────┘  │
-                         │           │                      │
-                         │           v                      │
-                         │   VesselActuator                 │
-                         │   (throttle, rudder_norm, rev)   │
-                         └─────────────────────────────────┘
-                                     │
-                         ┌───────────┴───────────┐
-                         v                       v
-                   Thruster controller    Rudder servo
+M·ν̇ = τ_ctrl + τ_dist − C(ν)·ν − D(ν)·ν
+
+Coriolis C(ν):  [[0, 0, -m22v-m26r],
+                 [0, 0,  m11u      ],
+                 [m22v+m26r, -m11u, 0]]
+
+Nonlinear damping: Xu·u + Xuu·|u|·u  (surge)
+                   Yv·v + Yvv·|v|·v  (sway)
+                   Nr·r + Nrr·|r|·r  (yaw)
+```
+
+### 2. Disturbance Forces
+
+```
+Wave (sinusoidal): τ_wave = k·Hs²·Awp·cos(ψ_wave−ψ)·sin(2π·t/Tp)
+Wind (dyn. pressure): τ_wind = 0.5·ρ_air·Vw²·C·A·cos/sin(ψ_wind−ψ)
+Current: relative velocity correction u_r, v_r
+```
+
+### 3. Submarine Depth Control (4-DOF)
+
+```
+e_z = target_depth − depth
+ẇ   = Bz·e_z − Kz·w
+depth' = depth + w·dt
+```
+
+### 4. LOS Guidance
+
+```
+ψ_d = α_k + atan2(−e, Δ) + δ_colregs
+δ_rudder = Kp·(ψ_d − ψ) − Kd·r
+```
+
+### 5. Multi-vessel COLREGs
+
+```
+Priority: EMERGENCY_STOP > GIVE_WAY (max angle) > STAND_ON > CRUISE
+HEAD_ON → +20° stbd  |  CROSSING_GW → +15°  |  OVERTAKING → +10°
+Returns: situations[], dominant_contact, avoid_heading_offset_rad
+```
+
+### 6. Maritime A*
+
+```
+cost = step_cost + depth_penalty
+depth_penalty = max(0, 1−(depth−draft)/10) × 0.2
+passable if: depth[r][c] ≥ draft + min_depth_m
 ```
 
 ---
 
-## Key equations
+## Quick Start
 
-### Fossen 3-DOF linear model
-
+```bash
+git clone https://github.com/qquartsco-svg/Orca.git
+cd Orca
+pip install -e .
 ```
-M · ν̇ = τ - D · ν
-η̇   = J(ψ) · ν
-
-η = [x, y, ψ]ᵀ      (earth-fixed position + heading)
-ν = [u, v, r]ᵀ      (surge, sway, yaw-rate)
-
-M = diag(m - X_u̇,  m - Y_v̇,  Iz - N_ṙ)   body inertia + added mass
-D = diag(-X_u,      -Y_v,      -N_r)         linear damping
-
-J(ψ) = [[cos ψ, -sin ψ, 0],
-         [sin ψ,  cos ψ, 0],
-         [0,      0,      1]]
-
-τ = [F_thrust,  0,  L_rudder · F_thrust · sin(δ)]ᵀ
-```
-
-### LOS guidance
-
-```
-α_k   = atan2(y_{k+1} - y_k,  x_{k+1} - x_k)   path angle
-e     = -(x - x_k)·sin(α_k) + (y - y_k)·cos(α_k)  cross-track error
-ψ_d   = α_k + atan2(-e, Δ)                       desired heading
-δ     = clamp(Kp·(ψ_d - ψ) - Kd·r, -δ_max, δ_max)  PD rudder
-```
-
-### Ω capability multiplier
-
-```
-ω_risk  = 0.55 if risk > 0.85 else 0.78 if risk > 0.35 else 1.0
-ω_fuel  = 0.70 if fuel < 0.20 else 1.0
-ω_vis   = 0.80 if visibility < 200 m else 1.0
-ω_depth = 0.65 if depth < 3·draft else 1.0
-Ω       = ω_risk × ω_fuel × ω_vis × ω_depth
-```
-
-### COLREGs situation classification
-
-| Geometry | Rule | Action |
-|---|---|---|
-| Contact bearing < 15°, courses opposing | 14 HEAD_ON | Both alter starboard |
-| Contact on own starboard bow (10°–112.5°) | 15 CROSSING | Give-way: alter/slow |
-| Contact on own port bow (247.5°–350°) | 15 CROSSING | Stand-on: maintain |
-| Contact from astern (112.5°–247.5°) | 13 OVERTAKING | Keep clear |
-| Contact < emergency_range_m | 8 SAFETY | Emergency stop |
-
----
-
-## Presets
-
-| Name | Cruise (kn) | Max (kn) | Lookahead (m) | Safe range (m) | Draft (m) |
-|---|---|---|---|---|---|
-| harbor | 3 | 5 | 20 | 100 | 1.5 |
-| coastal | 10 | 15 | 80 | 500 | 2.0 |
-| ocean | 20 | 25 | 200 | 2000 | 4.0 |
-| river | 5 | 8 | 40 | 150 | 1.0 |
-
----
-
-## Quick start
 
 ```python
-from marine_autonomy import (
-    VesselOrchestrator, MarineTickContext,
-    VesselState, MarinePerception, get_preset,
-)
-from marine_autonomy.dynamics import VesselParams, vessel_step_rk4
-from marine_autonomy.contracts.schemas import VesselCommand
-
-# Set up
-orch   = VesselOrchestrator(preset="coastal")
-params = VesselParams()
-
-ctx = MarineTickContext(
-    state=VesselState(x_m=0.0, y_m=0.0),
-    waypoints=((0.0, 0.0), (500.0, 300.0), (1000.0, 0.0)),
-    perception=MarinePerception(depth_m=30.0, visibility_m=10000.0),
+from marine_autonomy import VesselOrchestrator, MarineTickContext, get_preset
+from marine_autonomy.contracts.schemas import (
+    MarinePerception, ContactVessel, DisturbanceState, HullClass
 )
 
-for step in range(500):
+orch = VesselOrchestrator(preset=get_preset("coastal"))
+ctx  = MarineTickContext(
+    hull_class=HullClass.SURFACE_VESSEL,
+    waypoints=((0.0, 0.0), (500.0, 200.0), (1000.0, 0.0)),
+    perception=MarinePerception(
+        contacts=(
+            ContactVessel(id="TGT-01", range_m=400.0, bearing_rad=0.1,
+                          cog_rad=3.14, sog_ms=6.0),
+            ContactVessel(id="TGT-02", range_m=600.0, bearing_rad=1.2,
+                          cog_rad=1.5,  sog_ms=4.0),
+        ),
+        depth_m=25.0,
+    ),
+    disturbance=DisturbanceState(
+        wave_height_m=1.5, wave_period_s=8.0,
+        wind_speed_ms=8.0, wind_dir_rad=1.0,
+        t_s=0.0,
+    ),
+)
+
+for step in range(200):
     ctx = orch.tick(ctx, dt_s=0.1)
-
-    # Convert normalised actuator to physical command
-    thrust = ctx.actuator.throttle * params.max_thrust_n
-    if ctx.actuator.reverse:
-        thrust = -thrust
-    rudder = ctx.actuator.rudder_norm * params.max_rudder_rad
-    cmd = VesselCommand(thrust_n=thrust, rudder_rad=rudder)
-
-    # Integrate physics
-    new_state = vessel_step_rk4(ctx.state, cmd, params, dt_s=0.1)
-    ctx.state = new_state   # update for next tick
-
-print(f"Final position: ({ctx.state.x_m:.1f}, {ctx.state.y_m:.1f}) m")
-print(f"Omega: {ctx.omega:.3f}  |  Verdict: {ctx.verdict}")
+    print(f"[{step:3d}] {ctx.colregs_state:15s} Ω={ctx.omega:.3f} {ctx.verdict}")
 ```
 
-CLI example:
+---
+
+## Tests
 
 ```bash
-python examples/run_harbor.py --preset harbor --steps 200 --waypoints "0,0 100,50 200,0"
-python examples/run_harbor.py --preset coastal --steps 500 --waypoints "0,0 500,300 1000,0"
+pytest tests/ -v
+# 82 passed, 0 failed (stdlib only)
 ```
 
 ---
 
-## Extending — adding a new vessel type
+## Related Repos
 
-1. Subclass or instantiate `VesselParams` with your vessel's mass, damping, and actuation geometry:
-
-```python
-from marine_autonomy.dynamics import VesselParams
-
-my_ferry = VesselParams(
-    mass_kg=80_000,
-    Iz_kgm2=500_000,
-    X_udot=-8_000,  Y_vdot=-15_000, N_rdot=-4_000,
-    Xu=-800,        Yv=-2_000,      Nr=-1_500,
-    L_rudder_m=4.0,
-    max_thrust_n=200_000,
-    max_rudder_rad=0.524,  # 30°
-)
-```
-
-2. Optionally define a custom `MarinePreset` and register it:
-
-```python
-from marine_autonomy.presets import MarinePreset, PRESET_REGISTRY
-
-PRESET_REGISTRY["ferry"] = MarinePreset(
-    name="ferry",
-    max_speed_ms=10.3, cruise_speed_ms=8.2,
-    lookahead_m=150.0, acceptance_radius_m=60.0,
-    safe_range_m=800.0, action_range_m=2000.0, emergency_range_m=80.0,
-    draft_m=5.0, description="RoPax ferry",
-)
-```
-
-3. Pass the preset name to `VesselOrchestrator(preset="ferry")`.
-   The orchestrator, guidance, and COLREGs modules require no further changes.
+| Repo | Role |
+|------|------|
+| [Autonomy_Runtime_Stack](https://github.com/qquartsco-svg/Autonomy_Runtime_Stack) | AV foundation engine |
+| [SYD_DRIFT](https://github.com/qquartsco-svg/SYD_DRIFT) | AV + SHA-256 audit chain |
+| [marine-propulsion-engine](https://github.com/qquartsco-svg/marine-propulsion-engine) | Shaft wear control + audit |
+| **Orca** | Universal maritime autonomy engine (this repo) |
 
 ---
 
-## Relationship to Autonomy_Runtime_Stack
+## License
 
-`Marine_Autonomy_Stack` is a sibling package that applies the same
-architecture to marine surface vessels:
-
-| Aspect | Autonomy_Runtime_Stack | Marine_Autonomy_Stack |
-|---|---|---|
-| Vehicle domain | Ground / aerial | Marine surface |
-| Dynamics | Kinematic bicycle / IMU | Fossen 3-DOF |
-| Guidance | Pure-pursuit / path | LOS waypoint |
-| Collision avoidance | TTC-based FSM | COLREGs FSM |
-| Estimation | EKF (position + heading) | EKF (x, y, ψ, u) |
-| Orchestrator | AutonomyOrchestrator | VesselOrchestrator |
-| Dependencies | stdlib only | stdlib only |
-
-Both packages can be used independently or composed — e.g. a USV (unmanned
-surface vessel) operating as part of a larger autonomous system could have the
-`VesselOrchestrator` report state to an outer mission manager built on
-`Autonomy_Runtime_Stack`.
+MIT
 
 ---
 
-## Running tests
-
-```bash
-# From the package root:
-python -m pytest tests/ -v
-
-# Or without pytest:
-python tests/test_marine.py
-```
-
-All 22 tests pass with Python 3.8+ and no external dependencies.
+*Orca — the orca whale. The most precise navigator in the ocean.*
