@@ -14,7 +14,7 @@
 
 ## 무엇인가
 
-Poseidon은 모든 해양 기체를 위한 **범용 자율운항 제어 엔진**이다.
+Orca는 모든 해양 기체를 위한 **범용 자율운항 제어 엔진**이다.
 
 수상함, 잠수함, 요트, 보트, 자율 무인수상정(USV) — 선체 클래스만 바꾸면 동일한 엔진이 작동한다.
 외부 의존 없이 Jetson Nano, Raspberry Pi 같은 엣지 디바이스에서 바로 구동된다.
@@ -247,8 +247,8 @@ CRITICAL — Ω < 0.30
 ### 설치
 
 ```bash
-git clone https://github.com/qquartsco-svg/Poseidon.git
-cd Poseidon
+git clone https://github.com/qquartsco-svg/Orca.git
+cd Orca
 pip install -e .            # 코어 (stdlib only)
 pip install -e ".[full]"    # Autonomy_Runtime_Stack 포함
 ```
@@ -363,7 +363,7 @@ bridge.export_audit("shaft_audit.json")
 ## 파일 구조
 
 ```
-Poseidon/
+Orca/
 ├── marine_autonomy/
 │   ├── __init__.py            — 공개 API
 │   ├── dynamics.py            — 비선형 Fossen + 외란 + 잠수함 4-DOF
@@ -379,7 +379,7 @@ Poseidon/
 │       └── ais_adapter.py     — AIS 메시지 파서
 ├── tests/
 │   ├── test_marine.py         — 36 tests (기본 레이어)
-│   └── test_poseidon_upgrade.py — 46 tests (v0.2.0 업그레이드)
+│   └── test_orca_upgrade.py — 46 tests (v0.2.0 업그레이드)
 ├── examples/
 │   └── run_harbor.py          — CLI 드라이런
 ├── pyproject.toml
@@ -431,7 +431,7 @@ orch = VesselOrchestrator(bridge=ROS2Bridge(), preset=get_preset("coastal"))
 ## 의존 관계
 
 ```
-Poseidon (코어)
+Orca (코어)
 │  stdlib only — math, heapq, json, dataclasses, typing
 │
 ├── 선택 의존
@@ -452,7 +452,7 @@ Poseidon (코어)
 pytest tests/ -v
 # 82 passed, 0 failed (stdlib only)
 # test_marine.py          36 tests — 기본 레이어
-# test_poseidon_upgrade.py 46 tests — v0.2.0 업그레이드
+# test_orca_upgrade.py 46 tests — v0.2.0 업그레이드
 ```
 
 ---
